@@ -38,21 +38,21 @@ async def load_settings() -> dict[str, str]:
 
     return {
         "embed_color": rarity.embed_color or "",
-        "style": rarity.style or "container",
+        "style": rarity.style,
         "buttons_inside": "true" if rarity.buttons_inside else "false",
     }
 
 
 async def get_embed_color() -> str:
-    settings = await load_settings()
-    return settings["embed_color"]
+    s = await load_settings()
+    return s["embed_color"]
 
 
 async def get_style() -> str:
-    settings = await load_settings()
-    return settings["style"]
+    s = await load_settings()
+    return s["style"]
 
 
 async def get_buttons_inside() -> bool:
-    settings = await load_settings()
-    return settings["buttons_inside"] == "true"
+    s = await load_settings()
+    return s["buttons_inside"] == "true"
