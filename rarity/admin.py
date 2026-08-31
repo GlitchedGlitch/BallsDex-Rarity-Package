@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.core.exceptions import ObjectDoesNotExist
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 from .models import RaritySettings
 
 
@@ -12,6 +14,7 @@ class RaritySettingsAdmin(admin.ModelAdmin):
                 "style",
                 "buttons_inside",
             ),
+            "description": "Configure how the rarity command displays its output.",
         }),
     )
     
@@ -25,19 +28,18 @@ class RaritySettingsAdmin(admin.ModelAdmin):
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
+        # Remove settings field from form entirely
         if "settings" in form.base_fields:
-            form.base_fields["settings"].widget = admin.widgets.AdminHiddenInput()
+            del form.base_fields["settings"]
         return form
     
     def changelist_view(self, request, extra_context=None):
-        """Redirect to the edit page if instance exists, otherwise to add."""
+        """Redirect to the edit page if instance exists."""
         try:
             obj = RaritySettings.objects.select_related("settings").get()
-            from django.http import HttpResponseRedirect
-            from django.urls import reverse
             return HttpResponseRedirect(
                 reverse("admin:rarity_raritysettings_change", args=[obj.pk])
             )
-        except ObjectDoesNotExist:
+        except (ObjectDoesNotExist, RaritySettings.MultipleObjectsReturned):
             pass
         return super().changelist_view(request, extra_context=extra_context)
