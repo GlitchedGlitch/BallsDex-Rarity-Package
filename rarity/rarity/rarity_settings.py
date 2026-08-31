@@ -4,50 +4,55 @@ settings cuz why not
 
 from __future__ import annotations
 
-import os
+from typing import TYPE_CHECKING
 
-SETTINGS_FILE = "/code/admin_panel/config/rarity_settings.txt"
-
-DEFAULTS = {
-    "embed_color": "",       
-    "style": "container",    
-    "buttons_inside": "true", 
-}
+if TYPE_CHECKING:
+    from rarity.models import RaritySettings
 
 
-def load_settings() -> dict[str, str]:
-    data = dict(DEFAULTS)
-    try:
-        with open(SETTINGS_FILE) as f:
-            for line in f:
-                line = line.strip()
-                if not line or "=" not in line:
-                    continue
-                key, _, value = line.partition("=")
-                key = key.strip()
-                if key in DEFAULTS:
-                    data[key] = value.strip()
-    except FileNotFoundError:
-        pass
-    return data
+async def load_settings() -> dict[str, str]:
+    """
+    Load rarity settings from the Django RaritySettings model.
+    Falls back to defaults if no instance exists.
+    """
+    from settings.models import Settings
+    from rarity.models import RaritySettings
+
+    settings_obj = await Settings.objects.prefetch_related("rarity_settings").afirst()
+    
+    if not settings_obj:
+        return {
+            "embed_color": "",
+            "style": "container",
+            "buttons_inside": "true",
+        }
+
+    rarity: RaritySettings | None = getattr(settings_obj, "rarity_settings", None)
+    
+    if not rarity:
+        return {
+            "embed_color": "",
+            "style": "container",
+            "buttons_inside": "true",
+        }
+
+    return {
+        "embed_color": rarity.embed_color or "",
+        "style": rarity.style,
+        "buttons_inside": "true" if rarity.buttons_inside else "false",
+    }
 
 
-def save_settings(data: dict[str, str]) -> None:
-    merged = load_settings()
-    merged.update(data)
-    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
-    with open(SETTINGS_FILE, "w") as f:
-        for key, value in merged.items():
-            f.write(f"{key}={value}\n")
+async def get_embed_color() -> str:
+    s = await load_settings()
+    return s["embed_color"]
 
 
-def get_embed_color() -> str:
-    return load_settings()["embed_color"]
+async def get_style() -> str:
+    s = await load_settings()
+    return s["style"]
 
 
-def get_style() -> str:
-    return load_settings()["style"]
-
-
-def get_buttons_inside() -> bool:
-    return load_settings()["buttons_inside"] == "true"
+async def get_buttons_inside() -> bool:
+    s = await load_settings()
+    return s["buttons_inside"] == "true"
