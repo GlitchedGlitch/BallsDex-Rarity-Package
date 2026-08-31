@@ -10,7 +10,7 @@ class RaritySettings(models.Model):
         Settings,
         on_delete=models.CASCADE,
         related_name="rarity_settings",
-        editable=False,  # Hide from admin form
+        editable=False,
     )
     
     class Style(models.TextChoices):
@@ -18,7 +18,7 @@ class RaritySettings(models.Model):
         CONTAINER = "container", "Container"
 
     embed_color = models.CharField(
-        max_length=7,
+        max_length=6,
         blank=True,
         default="",
         help_text="Hex color for the line, leave empty for no color",
@@ -38,8 +38,10 @@ class RaritySettings(models.Model):
     )
 
     class Meta:
-        verbose_name = "Rarity Settings"
-        verbose_name_plural = "Rarity Settings"
+        app_label = "settings"  # Makes it appear under Settings in admin
+        db_table = "rarity_raritysettings"
+        verbose_name = "Rarity settings"
+        verbose_name_plural = "Rarity settings"
 
     def __str__(self) -> str:
         return "Rarity Settings"
