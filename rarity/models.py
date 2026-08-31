@@ -37,11 +37,60 @@ class RaritySettings(models.Model):
         verbose_name="Buttons inside",
     )
 
+    # NEW FIELDS
+    tier_mode = models.BooleanField(
+        default=False,
+        help_text="Group balls by calculated tiers instead of raw rarity values",
+        verbose_name="Tier mode",
+    )
+    entries_per_page = models.PositiveIntegerField(
+        default=7,
+        help_text="Number of rarity groups shown per page",
+        verbose_name="Entries per page",
+    )
+    special_rarity = models.BooleanField(
+        default=False,
+        help_text="Enable the option to show special event rarities instead of ball rarities",
+        verbose_name="Special rarity mode",
+    )
+    search_enabled = models.BooleanField(
+        default=True,
+        help_text="Enable the search parameter",
+        verbose_name="Search enabled",
+    )
+    rarity_search_enabled = models.BooleanField(
+        default=True,
+        help_text="Allow searching by rarity value. Disable to search by ball name only.",
+        verbose_name="Rarity search enabled",
+    )
+    ephemeral_enabled = models.BooleanField(
+        default=True,
+        help_text="Enable the ephemeral parameter",
+        verbose_name="Ephemeral enabled",
+    )
+    hidden_balls = models.TextField(
+        blank=True,
+        default="",
+        help_text="Semicolon-separated list of ball names to hide from the rarity list",
+        verbose_name="Hidden balls",
+    )
+    show_thumbnail = models.BooleanField(
+        default=True,
+        help_text="Show the bot's profile picture as thumbnail on all pages",
+        verbose_name="Show bot thumbnail",
+    )
+
     class Meta:
-        app_label = "settings"  # Makes it appear under Settings in admin
+        app_label = "settings"
         db_table = "rarity_raritysettings"
         verbose_name = "Rarity settings"
         verbose_name_plural = "Rarity settings"
 
     def __str__(self) -> str:
         return "Rarity Settings"
+
+    def get_hidden_balls_set(self) -> set[str]:
+        """Return a set of hidden ball names (case-insensitive)."""
+        if not self.hidden_balls:
+            return set()
+        return {name.strip().lower() for name in self.hidden_balls.split(";") if name.strip()}
