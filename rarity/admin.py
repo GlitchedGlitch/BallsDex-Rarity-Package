@@ -15,16 +15,16 @@ class RaritySettingsInline(admin.StackedInline):
     fields = ("embed_color", "style", "buttons_inside")
     classes = ("collapse",)
 
-_original_get_inlines = SettingsAdmin.get_inlines
-
-
 def _patched_get_inlines(self, request, obj=None):
-    inlines = list(_original_get_inlines(request, obj)) if callable(_original_get_inlines) else []
+    inlines = []
+    for inline_class in type(self).inlines if hasattr(type(self), 'inlines') else []:
+        inlines.append(inline_class)
     inlines.append(RaritySettingsInline)
     return inlines
 
-
-SettingsAdmin.get_inlines = _patched_get_inlines
+if not hasattr(SettingsAdmin, '_rarity_patched'):
+    SettingsAdmin.get_inlines = _patched_get_inlines
+    SettingsAdmin._rarity_patched = True  # type: ignore
 
 _original_save_model = SettingsAdmin.save_model
 
@@ -41,7 +41,9 @@ def _patched_save_model(self, request, obj, form, change):
     )
 
 
-SettingsAdmin.save_model = _patched_save_model
+if not hasattr(SettingsAdmin, '_rarity_save_patched'):
+    SettingsAdmin.save_model = _patched_save_model
+    SettingsAdmin._rarity_save_patched = True  # type: ignore
 
 try:
     admin.site.unregister(RaritySettings)
