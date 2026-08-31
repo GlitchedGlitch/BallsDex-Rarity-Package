@@ -5,7 +5,7 @@ Add this to config/extra.toml (or create the file if it doesn't exist)
 ```toml
 # Rarity Package
 [[ballsdex.packages]]
-location = "git+https://github.com/GlitchedGlitch/Ballsdex-Rarity-Package.git@1.2.0"
+location = "git+https://github.com/GlitchedGlitch/Ballsdex-Rarity-Package.git@2.0.0"
 path = "rarity"
 enabled = true
 ```
