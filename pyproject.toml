@@ -18,4 +18,4 @@ Package = "https://github.com/GlitchedGlitch/Ballsdex-Rarity-Package"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["rarity*"] 
+include = ["rarity"] 
