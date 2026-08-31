@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .models import RaritySettings
+    from rarity.models import RaritySettings
 
 
 async def load_settings() -> dict[str, str]:
@@ -16,7 +16,7 @@ async def load_settings() -> dict[str, str]:
     Falls back to defaults if no instance exists.
     """
     from settings.models import Settings
-    from .models import RaritySettings
+    from rarity.models import RaritySettings
 
     settings_obj = await Settings.objects.prefetch_related("rarity_settings").afirst()
     
