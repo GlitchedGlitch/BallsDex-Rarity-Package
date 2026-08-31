@@ -288,7 +288,7 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
         ephemeral: bool = False,
     ):
         plural = settings.plural_collectible_name.capitalize()
-        pkg_settings = load_settings(settings)
+        pkg_settings = await load_settings()
 
         all_balls: list[Ball] = [b async for b in Ball.objects.filter(enabled=True)]
 
