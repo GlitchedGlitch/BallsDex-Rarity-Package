@@ -1,45 +1,49 @@
 from django.contrib import admin
-from django.core.exceptions import ObjectDoesNotExist
-from django.http import HttpResponseRedirect
-from django.urls import reverse
+from settings.admin import SettingsAdmin
+from settings.models import Settings
 from .models import RaritySettings
 
 
-@admin.register(RaritySettings)
-class RaritySettingsAdmin(admin.ModelAdmin):
-    fieldsets = (
-        (None, {
-            "fields": (
-                "embed_color",
-                "style",
-                "buttons_inside",
-            ),
-            "description": "Configure how the rarity command displays its output.",
-        }),
+class RaritySettingsInline(admin.StackedInline):
+    """
+    Inline admin for RaritySettings, shown inside the main Settings edit page.
+    """
+    model = RaritySettings
+    can_delete = False
+    verbose_name = "Rarity Settings"
+    verbose_name_plural = "Rarity Settings"
+    fields = ("embed_color", "style", "buttons_inside")
+    classes = ("collapse",)
+
+_original_get_inlines = SettingsAdmin.get_inlines
+
+
+def _patched_get_inlines(self, request, obj=None):
+    inlines = list(_original_get_inlines(request, obj)) if callable(_original_get_inlines) else []
+    inlines.append(RaritySettingsInline)
+    return inlines
+
+
+SettingsAdmin.get_inlines = _patched_get_inlines
+
+_original_save_model = SettingsAdmin.save_model
+
+
+def _patched_save_model(self, request, obj, form, change):
+    _original_save_model(self, request, obj, form, change)
+    RaritySettings.objects.get_or_create(
+        settings=obj,
+        defaults={
+            "embed_color": "",
+            "style": RaritySettings.Style.CONTAINER,
+            "buttons_inside": True,
+        }
     )
-    
-    def has_add_permission(self, request):
-        """Prevent adding more than one instance."""
-        return not RaritySettings.objects.exists()
-    
-    def has_delete_permission(self, request, obj=None):
-        """Prevent deletion."""
-        return False
-    
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        # Remove settings field from form entirely
-        if "settings" in form.base_fields:
-            del form.base_fields["settings"]
-        return form
-    
-    def changelist_view(self, request, extra_context=None):
-        """Redirect to the edit page if instance exists."""
-        try:
-            obj = RaritySettings.objects.select_related("settings").get()
-            return HttpResponseRedirect(
-                reverse("admin:rarity_raritysettings_change", args=[obj.pk])
-            )
-        except (ObjectDoesNotExist, RaritySettings.MultipleObjectsReturned):
-            pass
-        return super().changelist_view(request, extra_context=extra_context)
+
+
+SettingsAdmin.save_model = _patched_save_model
+
+try:
+    admin.site.unregister(RaritySettings)
+except admin.sites.NotRegistered:
+    pass
