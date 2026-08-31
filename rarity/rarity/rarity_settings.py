@@ -4,50 +4,30 @@ settings cuz why not
 
 from __future__ import annotations
 
-import os
+from typing import TYPE_CHECKING
 
-SETTINGS_FILE = "/code/admin_panel/config/rarity_settings.txt"
-
-DEFAULTS = {
-    "embed_color": "",       
-    "style": "container",    
-    "buttons_inside": "true", 
-}
+if TYPE_CHECKING:
+    from settings.models import Settings
 
 
-def load_settings() -> dict[str, str]:
-    data = dict(DEFAULTS)
-    try:
-        with open(SETTINGS_FILE) as f:
-            for line in f:
-                line = line.strip()
-                if not line or "=" not in line:
-                    continue
-                key, _, value = line.partition("=")
-                key = key.strip()
-                if key in DEFAULTS:
-                    data[key] = value.strip()
-    except FileNotFoundError:
-        pass
-    return data
+def load_settings(settings_obj: "Settings") -> dict[str, str]:
+    """
+    Load rarity settings from the Django Settings model.
+    """
+    return {
+        "embed_color": getattr(settings_obj, "rarity_embed_color", "") or "",
+        "style": getattr(settings_obj, "rarity_style", "container") or "container",
+        "buttons_inside": "true" if getattr(settings_obj, "rarity_buttons_inside", True) else "false",
+    }
 
 
-def save_settings(data: dict[str, str]) -> None:
-    merged = load_settings()
-    merged.update(data)
-    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
-    with open(SETTINGS_FILE, "w") as f:
-        for key, value in merged.items():
-            f.write(f"{key}={value}\n")
+def get_embed_color(settings_obj: "Settings") -> str:
+    return load_settings(settings_obj)["embed_color"]
 
 
-def get_embed_color() -> str:
-    return load_settings()["embed_color"]
+def get_style(settings_obj: "Settings") -> str:
+    return load_settings(settings_obj)["style"]
 
 
-def get_style() -> str:
-    return load_settings()["style"]
-
-
-def get_buttons_inside() -> bool:
-    return load_settings()["buttons_inside"] == "true"
+def get_buttons_inside(settings_obj: "Settings") -> bool:
+    return load_settings(settings_obj)["buttons_inside"] == "true"
