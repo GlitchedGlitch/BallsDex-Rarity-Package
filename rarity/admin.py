@@ -28,10 +28,9 @@ class RaritySettingsAdmin(admin.ModelAdmin):
             "fields": (
                 "search_enabled",
                 "rarity_search_enabled",
-                "special_rarity",
                 "ephemeral_enabled",
             ),
-            "description": "Toggle command parameters and modes.",
+            "description": "Toggle command parameters.",
         }),
         ("Filtering", {
             "fields": (
