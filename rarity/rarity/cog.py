@@ -546,11 +546,17 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
             container.accent_color = line_color
 
         # Add thumbnail accessory to container
-        if show_thumbnail and bot_avatar:
-            container.accessory = discord.ui.Thumbnail(bot_avatar)
-
         title_text = f"# {list_title}"
-        container.add_item(discord.ui.TextDisplay(title_text))
+        
+        if show_thumbnail and bot_avatar:
+            section = discord.ui.Section(
+                discord.ui.TextDisplay(title_text),
+                accessory=discord.ui.Thumbnail(bot_avatar),
+            )
+            container.add_item(section)
+        else:
+            container.add_item(discord.ui.TextDisplay(title_text))
+        
         container.add_item(discord.ui.Separator())
         header_item_count = 2
 
