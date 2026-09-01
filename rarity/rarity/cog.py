@@ -400,17 +400,17 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
 
                 if not matches:
                     await interaction.response.send_message(
-                        f"No {'specials' if use_specials else settings.collectible_name} found with rarity `{search}`.",
+                        f"No {'specials' if use_specials else settings.plural_collectible_name} found with rarity `{search}`.",
                         ephemeral=True,
                     )
                     return
 
                 lines = [f"{item_emoji_key(b)} {item_name_key(b)}" for b in matches]
-                collectible_name = settings.collectible_name.title()
+                collectible_name = settings.plural_collectible_name.title()
                 
                 if pkg_settings["tier_mode"] and not is_special_mode:
                     await interaction.response.send_message(
-                        f"{collectible_name} with T{search}:\n" + "\n".join(lines),
+                        f"{collectible_name} with tier `{search}`:\n" + "\n".join(lines),
                         ephemeral=True,
                     )
                 else:
