@@ -36,8 +36,6 @@ class RaritySettings(models.Model):
         help_text="Place pagination buttons inside the container (only applies to container style)",
         verbose_name="Buttons inside",
     )
-
-    # NEW FIELDS
     tier_mode = models.BooleanField(
         default=False,
         help_text="Group balls by calculated tiers instead of raw rarity values",
@@ -47,11 +45,6 @@ class RaritySettings(models.Model):
         default=7,
         help_text="Number of rarity groups shown per page",
         verbose_name="Entries per page",
-    )
-    special_rarity = models.BooleanField(
-        default=False,
-        help_text="Enable the option to show special event rarities instead of ball rarities",
-        verbose_name="Special rarity mode",
     )
     search_enabled = models.BooleanField(
         default=True,
@@ -90,7 +83,6 @@ class RaritySettings(models.Model):
         return "Rarity Settings"
 
     def get_hidden_balls_set(self) -> set[str]:
-        """Return a set of hidden ball names (case-insensitive)."""
         if not self.hidden_balls:
             return set()
         return {name.strip().lower() for name in self.hidden_balls.split(";") if name.strip()}
