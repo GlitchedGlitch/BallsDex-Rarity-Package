@@ -51,15 +51,14 @@ def _hex_to_color(hex_str: str) -> discord.Color | None:
 def _calculate_tiers(balls_list: list[Ball]) -> dict[int, list[Ball]]:
     """
     Calculate tiers from rarity values using logarithmic scaling.
+    T1 = most rare (lowest rarity value), higher tiers = more common.
     """
     if not balls_list:
         return {}
 
-    # Sort by rarity descending
-    sorted_balls = sorted(balls_list, key=lambda b: b.rarity, reverse=True)
+    # Sort by rarity ascending
+    sorted_balls = sorted(balls_list, key=lambda b: b.rarity)
     
-    # Use logarithmic binning to create tiers
-    # This naturally handles any range of rarity values
     rarities = [b.rarity for b in sorted_balls]
     max_r = max(rarities)
     min_r = min(rarities)
@@ -67,8 +66,6 @@ def _calculate_tiers(balls_list: list[Ball]) -> dict[int, list[Ball]]:
     if max_r == min_r:
         return {1: sorted_balls}
 
-    # Logarithmic tier calculation
-    # Tier 1 = highest rarity, tier increases as rarity decreases
     log_max = math.log10(max_r) if max_r > 0 else 0
     log_min = math.log10(min_r) if min_r > 0 else 0
     log_range = log_max - log_min if log_max != log_min else 1
@@ -79,10 +76,8 @@ def _calculate_tiers(balls_list: list[Ball]) -> dict[int, list[Ball]]:
         if ball.rarity <= 0:
             continue
         log_r = math.log10(ball.rarity) if ball.rarity > 0 else log_min
-        # Normalize to 0-1, then scale to tier numbers
         normalized = (log_r - log_min) / log_range if log_range > 0 else 0
-        # Invert so highest rarity = tier 1
-        tier = max(1, int((1 - normalized) * 99) + 1)
+        tier = max(1, int(normalized * 99) + 1)
         tiers[tier].append(ball)
 
     return dict(tiers)
@@ -92,16 +87,11 @@ def _format_rarity_value(rarity: float, tier_mode: bool) -> str:
     """Format rarity value for display."""
     if tier_mode:
         return f"T{int(rarity)}"
-    percentage = rarity * 100
-    if percentage == 0:
-        return "0%"
-    if percentage >= 1:
-        return f"{percentage:.2f}".rstrip("0").rstrip(".") + "%"
-    return f"{percentage:.4f}".rstrip("0").rstrip(".") + "%"
+    return str(rarity)
 
 
 class RarityCog(commands.Cog):
-    """Rarity package — displays the ball rarity list."""
+    """Rarity package"""
 
     def __init__(self, bot: "BallsDexBot"):
         self.bot = bot
@@ -299,51 +289,123 @@ class EmbedPaginatorView(discord.ui.View):
             child.disabled = True  # type: ignore
 
 
+def _build_rarity_command_describe(
+    pkg_settings: dict,
+) -> dict[str, app_commands.describe]:
+    """
+    Build describe decorators dynamically based on settings.
+    Returns a dict of parameter names to describe objects.
+    """
+    describes = {}
+
+    if pkg_settings["search_enabled"]:
+        describes["search"] = app_commands.describe(
+            search=f"Search a specific {settings.collectible_name}'s rarity"
+        )
+
+    # Special is always a user option
+    describes["special"] = app_commands.describe(
+        special="Show the special event rarity list instead of balls"
+    )
+
+    if pkg_settings["ephemeral_enabled"]:
+        describes["ephemeral"] = app_commands.describe(
+            ephemeral="Whether or not to send the command ephemerally"
+        )
+
+    describes["reverse"] = app_commands.describe(
+        reverse="Reverse the output of the rarity list"
+    )
+
+    return describes
+
+
 def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
     """
     Build the rarity command with all configurable options.
+    Dynamically adds/removes parameters based on admin settings.
     """
 
+    # Load settings at command build time to determine parameters
+    # Note: This is sync, but settings are cached. For truly dynamic,
+    # we'd need to rebuild the command on settings change.
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        pkg_settings = loop.run_until_complete(load_settings())
+    except RuntimeError:
+        # Fallback defaults
+        pkg_settings = {
+            "search_enabled": True,
+            "ephemeral_enabled": True,
+            "tier_mode": False,
+            "entries_per_page": 7,
+            "special_rarity": False,
+            "rarity_search_enabled": True,
+            "hidden_balls": set(),
+            "show_thumbnail": True,
+            "embed_color": "",
+            "style": "container",
+            "buttons_inside": True,
+        }
+
+    # Build the command signature dynamically
+    params = []
+    if pkg_settings["search_enabled"]:
+        params.append("search: str | None = None")
+    
+    # Special is always available as user option
+    params.append("special: bool = False")
+    
+    params.append("reverse: bool = False")
+    
+    if pkg_settings["ephemeral_enabled"]:
+        params.append("ephemeral: bool = False")
+
+    # We need to use exec to build the function with dynamic signature
+    # But that's messy. Instead, we'll define all params and check settings inside.
+    
     @app_commands.command(
         name="rarity",
         description="Check the rarity list of the bot",
     )
-    @app_commands.describe(
-        search=f"Search a specific {settings.collectible_name}'s rarity",
-        reverse="Reverse the output of the rarity list",
-        ephemeral="Whether or not to send the command ephemerally",
-    )
     async def rarity(
         interaction: discord.Interaction,
         search: str | None = None,
+        special: bool = False,
         reverse: bool = False,
         ephemeral: bool = False,
     ):
         plural = settings.plural_collectible_name.capitalize()
         pkg_settings = await load_settings()
 
-        # Check if ephemeral is enabled
+        # Check if ephemeral is enabled in settings
         if not pkg_settings["ephemeral_enabled"]:
             ephemeral = False
 
-        # Build hidden balls set
-        hidden_balls = pkg_settings["hidden_balls"]
+        # Check if search is used but disabled
+        if search is not None and not pkg_settings["search_enabled"]:
+            await interaction.response.send_message(
+                "Search is disabled for this command.",
+                ephemeral=True,
+            )
+            return
 
         # Determine which model to use
-        use_specials = pkg_settings["special_rarity"]
+        # "special" parameter is user choice, overrides default
+        use_specials = special
 
         if use_specials:
             # Special rarity mode
-            from bd_models.models import Special
-            all_items: list[Special] = [s for s in special_cache.values() if s.rarity > 0 and not s.hidden]
+            all_items = [s for s in special_cache.values() if s.rarity > 0 and not s.hidden]
             item_name_key = lambda x: x.name
             item_emoji_key = lambda x: x.emoji or "N/A"
             item_rarity_key = lambda x: float(x.rarity)
             list_title = f"{settings.bot_name} Special Rarity List"
         else:
             # Ball rarity mode
-            all_items: list[Ball] = [b for b in balls_cache.values() if b.enabled and b.rarity > 0]
-            # Filter hidden balls
+            hidden_balls = pkg_settings["hidden_balls"]
+            all_items = [b for b in balls_cache.values() if b.enabled and b.rarity > 0]
             all_items = [b for b in all_items if b.country.lower() not in hidden_balls]
             item_name_key = lambda x: x.country
             item_emoji_key = lambda x: _ball_emoji(bot, x)
@@ -359,14 +421,6 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
 
         # ── Search mode ───────────────────────────────────────────────────────
         if search:
-            # Check if search is enabled
-            if not pkg_settings["search_enabled"]:
-                await interaction.response.send_message(
-                    "Search is disabled for this command.",
-                    ephemeral=True,
-                )
-                return
-
             # Try rarity value search (if enabled)
             is_rarity_search = False
             if pkg_settings["rarity_search_enabled"]:
@@ -379,7 +433,6 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
             if is_rarity_search:
                 # Search by rarity value
                 if pkg_settings["tier_mode"]:
-                    # In tier mode, search by tier number
                     try:
                         tier_num = int(search)
                         tiers = _calculate_tiers(all_items)
@@ -396,14 +449,13 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
                     )
                     return
 
+                lines = [f"{item_emoji_key(b)} {item_name_key(b)}" for b in matches]
                 if pkg_settings["tier_mode"]:
-                    lines = [f"{item_emoji_key(b)} {item_name_key(b)}" for b in matches]
                     await interaction.response.send_message(
-                        f"Tier T{search} {'specials' if use_specials else plural}:\n" + "\n".join(lines),
+                        f"T{search} {'specials' if use_specials else plural}:\n" + "\n".join(lines),
                         ephemeral=True,
                     )
                 else:
-                    lines = [f"{item_emoji_key(b)} {item_name_key(b)}" for b in matches]
                     await interaction.response.send_message(
                         f"{'Specials' if use_specials else plural} with rarity `{search}`:\n" + "\n".join(lines),
                         ephemeral=True,
@@ -446,11 +498,9 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
 
         # Build rarity map
         if pkg_settings["tier_mode"]:
-            # Tier mode: group by calculated tiers
             rarity_map = _calculate_tiers(all_items)
             sorted_keys = sorted(rarity_map.keys())
         else:
-            # Raw rarity mode: group by exact rarity values
             rarity_map: dict[float, list] = defaultdict(list)
             for b in all_items:
                 rarity_map[item_rarity_key(b)].append(b)
@@ -469,7 +519,7 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
         entries_per_page = pkg_settings["entries_per_page"]
         show_thumbnail = pkg_settings["show_thumbnail"]
 
-        # Get bot avatar URL for thumbnail
+        # Get bot avatar URL
         bot_avatar = bot.user.display_avatar.url if bot.user else None
 
         if use_embed_style:
@@ -481,9 +531,9 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
                     f"⋄ {item_emoji_key(b)} {item_name_key(b)}" for b in group_items
                 )
                 if pkg_settings["tier_mode"]:
-                    entries.append((f"∥ Tier T{key}", lines))
+                    entries.append((f"∥ T{key}", lines))
                 else:
-                    entries.append((f"∥ Rarity: {_format_rarity_value(key, False)}", lines))
+                    entries.append((f"∥ Rarity: {key}", lines))
 
             chunks = [
                 entries[i : i + entries_per_page]
@@ -520,9 +570,9 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
                 f"⋄ {item_emoji_key(b)} {item_name_key(b)}" for b in group_items
             )
             if pkg_settings["tier_mode"]:
-                all_components.append(discord.ui.TextDisplay(f"**∥ Tier T{key}**\n{lines}"))
+                all_components.append(discord.ui.TextDisplay(f"**∥ T{key}**\n{lines}"))
             else:
-                all_components.append(discord.ui.TextDisplay(f"**∥ Rarity: {_format_rarity_value(key, False)}**\n{lines}"))
+                all_components.append(discord.ui.TextDisplay(f"**∥ Rarity: {key}**\n{lines}"))
 
         pages: list[list[discord.ui.Item]] = [
             all_components[i : i + entries_per_page]
@@ -534,13 +584,14 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
         if line_color is not None:
             container.accent_color = line_color
 
-        # Title with optional thumbnail
-        title_parts = [f"# {list_title}"]
+        # Build title with thumbnail as first item if enabled
+        title_parts = []
         if show_thumbnail and bot_avatar:
-            # In container style, we can't easily set thumbnail, but we can mention it in text
-            pass  # Thumbnails are embed-only, container doesn't support them natively
+            # Use markdown image syntax for thumbnail-like display in container
+            title_parts.append(f"![thumbnail]({bot_avatar})")
+        title_parts.append(f"# {list_title}")
         
-        title_text = f"# {list_title}"
+        title_text = "\n".join(title_parts) if title_parts else f"# {list_title}"
         container.add_item(discord.ui.TextDisplay(title_text))
         container.add_item(discord.ui.Separator())
         header_item_count = 2
@@ -576,17 +627,15 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
     ) -> list[app_commands.Choice[str]]:
         pkg_settings = await load_settings()
         
-        # Check if search is enabled
         if not pkg_settings["search_enabled"]:
             return []
 
-        use_specials = pkg_settings["special_rarity"]
+        use_specials = interaction.namespace.special if hasattr(interaction.namespace, "special") else False
         hidden_balls = pkg_settings["hidden_balls"]
 
         results: list[app_commands.Choice[str]] = []
 
         if use_specials:
-            # Special autocomplete
             for s in special_cache.values():
                 if s.rarity > 0 and not s.hidden:
                     if current.lower() in s.name.lower():
@@ -594,7 +643,6 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
                         if len(results) >= 25:
                             break
         else:
-            # Ball autocomplete
             for b in balls_cache.values():
                 if b.enabled and b.rarity > 0 and b.country.lower() not in hidden_balls:
                     if current.lower() in b.country.lower():
@@ -605,7 +653,3 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
         return results
 
     return rarity
-
-
-async def setup(bot: "BallsDexBot") -> None:
-    await bot.add_cog(RarityCog(bot))
