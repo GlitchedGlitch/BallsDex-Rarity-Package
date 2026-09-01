@@ -16,6 +16,29 @@ class RaritySettingsAdmin(admin.ModelAdmin):
             ),
             "description": "Configure how the rarity command displays its output.",
         }),
+        ("Display", {
+            "fields": (
+                "tier_mode",
+                "entries_per_page",
+                "show_thumbnail",
+            ),
+            "description": "Configure list display options.",
+        }),
+        ("Command Options", {
+            "fields": (
+                "search_enabled",
+                "rarity_search_enabled",
+                "ephemeral_enabled",
+            ),
+            "description": "Toggle command parameters.",
+        }),
+        ("Filtering", {
+            "fields": (
+                "hidden_balls",
+            ),
+            "description": "Hide specific balls from the rarity list.",
+            "classes": ("collapse",),
+        }),
     )
     
     def has_add_permission(self, request):
