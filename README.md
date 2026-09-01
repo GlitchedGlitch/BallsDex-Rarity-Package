@@ -27,3 +27,4 @@ enabled = true
 | **Search**           | Enables or disables searching for a specific ball or special.                                                                              |
 | **Rarity Search**    | Expands the search feature to allow searching for balls by their rarity value. Requires **Search** to be enabled.                          |
 | **Ephemeral**        | Enables or disables ephemeral mode, allowing the rarity list to be visible only to the user who ran the command.                           |
+| **Balls Blacklist**  | Hides certain balls from the command.                                                                                                      |
