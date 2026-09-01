@@ -23,9 +23,25 @@ async def setup(bot: "BallsDexBot") -> None:
         group.add_command(build_rarity_command(bot))
     else:
         log.warning(
-            "Balls cog not found — rarity command will not be registered. "
+            "Balls cog not found - rarity command will not be registered. "
             "Ensure the balls package loads before rarity."
         )
+    
+    # Check if command tree needs reload after settings change
+    try:
+        from rarity.models import RaritySettings
+        rarity_settings = await RaritySettings.objects.select_related("settings").afirst()
+        if rarity_settings and rarity_settings._reload_tree_on_change:
+            log.info("Reloading command tree due to rarity settings change...")
+            await bot.tree.sync()
+            from ballsdex.settings import settings as bot_settings
+            for guild_id in bot_settings.admin_guild_ids:
+                await bot.tree.sync(guild=discord.Object(id=guild_id))
+            rarity_settings._reload_tree_on_change = False
+            await rarity_settings.asave(update_fields=["_reload_tree_on_change"])
+            log.info("Command tree reloaded successfully.")
+    except Exception as e:
+        log.warning(f"Failed to check/reload command tree: {e}")
 
 
 async def teardown(bot: "BallsDexBot") -> None:
