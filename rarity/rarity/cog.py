@@ -19,7 +19,6 @@ from ballsdex.core.discord import LayoutView
 from ballsdex.core.utils.menus import Menu
 from ballsdex.core.utils.menus.source import ListSource
 from ballsdex.core.utils.menus.formatter import ItemFormatter
-from ballsdex.core.utils.transformers import BallEnabledTransform, SpecialEnabledTransform
 from settings.models import settings
 
 from .rarity_settings import load_settings
@@ -38,6 +37,18 @@ def _ball_emoji(bot: "BallsDexBot", ball: Ball) -> str:
     return "⋄"
 
 
+def _special_emoji(bot: "BallsDexBot", special) -> str:
+    """Get special emoji"""
+    if not special.emoji:
+        return "N/A"
+    try:
+        emoji_id = int(special.emoji)
+        emoji = bot.get_emoji(emoji_id)
+        return str(emoji) if emoji else f"<:{special.name}:{emoji_id}>"
+    except (ValueError, TypeError):
+        return special.emoji
+
+
 def _hex_to_color(hex_str: str) -> discord.Color | None:
     hex_str = hex_str.strip().lstrip("#")
     if not hex_str:
@@ -50,8 +61,7 @@ def _hex_to_color(hex_str: str) -> discord.Color | None:
 
 def _calculate_tiers(balls_list: list[Ball]) -> dict[int, list[Ball]]:
     """
-    Calculate tiers from rarity values using logarithmic scaling.
-    T1 = most rare (lowest rarity value), higher tiers = more common.
+    Calculate tiers from rarity values
     """
     if not balls_list:
         return {}
@@ -59,15 +69,18 @@ def _calculate_tiers(balls_list: list[Ball]) -> dict[int, list[Ball]]:
     # Sort by rarity ascending
     sorted_balls = sorted(balls_list, key=lambda b: b.rarity)
     
-    rarities = [b.rarity for b in sorted_balls]
-    max_r = max(rarities)
+    rarities = [b.rarity for b in sorted_balls if b.rarity > 0]
+    if not rarities:
+        return {}
+
     min_r = min(rarities)
+    max_r = max(rarities)
     
     if max_r == min_r:
         return {1: sorted_balls}
 
-    log_max = math.log10(max_r) if max_r > 0 else 0
-    log_min = math.log10(min_r) if min_r > 0 else 0
+    log_min = math.log(min_r) if min_r > 0 else 0
+    log_max = math.log(max_r) if max_r > 0 else 0
     log_range = log_max - log_min if log_max != log_min else 1
     
     tiers: dict[int, list[Ball]] = defaultdict(list)
@@ -75,20 +88,26 @@ def _calculate_tiers(balls_list: list[Ball]) -> dict[int, list[Ball]]:
     for ball in sorted_balls:
         if ball.rarity <= 0:
             continue
-        log_r = math.log10(ball.rarity) if ball.rarity > 0 else log_min
+        log_r = math.log(ball.rarity) if ball.rarity > 0 else log_min
+
         normalized = (log_r - log_min) / log_range if log_range > 0 else 0
-        # T1 = most rare (lowest rarity), higher tier = more common
-        tier = max(1, int(normalized * 99) + 1)
+
+        tier = max(1, int((1 - normalized) * 10) + 1)
+
         tiers[tier].append(ball)
 
-    return dict(tiers)
+    sorted_tier_nums = sorted(tiers.keys())
+    continuous_tiers: dict[int, list[Ball]] = {}
+    for new_num, old_num in enumerate(sorted_tier_nums, start=1):
+        continuous_tiers[new_num] = tiers[old_num]
+
+    return continuous_tiers
 
 
 def _format_rarity_value(rarity: float, tier_mode: bool, is_special: bool = False) -> str:
-    """Format rarity value for display."""
+    """Format rarity value for display"""
     if tier_mode:
         return f"T{int(rarity)}"
-    # For specials, always show percentage
     if is_special:
         percentage = rarity * 100
         if percentage == 0:
@@ -96,19 +115,26 @@ def _format_rarity_value(rarity: float, tier_mode: bool, is_special: bool = Fals
         if percentage >= 1:
             return f"{percentage:.2f}".rstrip("0").rstrip(".") + "%"
         return f"{percentage:.4f}".rstrip("0").rstrip(".") + "%"
-    # For balls in normal mode, show raw rarity
     return str(rarity)
 
 
-def _format_special_rarity(special) -> str:
-    """Format special rarity as percentage."""
-    rarity = float(special.rarity)
-    percentage = rarity * 100
-    if percentage == 0:
-        return "0%"
-    if percentage >= 1:
-        return f"{percentage:.2f}".rstrip("0").rstrip(".") + "%"
-    return f"{percentage:.4f}".rstrip("0").rstrip(".") + "%"
+def _get_rarity_label(key, pkg_settings: dict, is_special: bool = False) -> str:
+    """Get rarity label"""
+    tier_mode = pkg_settings["tier_mode"] and not is_special
+    
+    if tier_mode:
+        base = f"∥ Tier T{key}"
+        tag_key = (float(key), True)
+    else:
+        formatted = _format_rarity_value(key, False, is_special)
+        base = f"∥ Rarity: {formatted}"
+        tag_key = (float(key), False)
+    
+    tags = pkg_settings.get("rarity_tags", {})
+    if tag_key in tags:
+        base += f" ({tags[tag_key]})"
+    
+    return base
 
 
 class RarityCog(commands.Cog):
@@ -310,10 +336,6 @@ class EmbedPaginatorView(discord.ui.View):
 
 
 def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
-    """
-    Build the rarity command with all configurable options.
-    """
-
     @app_commands.command(
         name="rarity",
         description="Check the rarity list of the bot",
@@ -334,11 +356,9 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
         plural = settings.plural_collectible_name.capitalize()
         pkg_settings = await load_settings()
 
-        # Check if ephemeral is enabled in settings
         if not pkg_settings["ephemeral_enabled"]:
             ephemeral = False
 
-        # Check if search is used but disabled
         if search is not None and not pkg_settings["search_enabled"]:
             await interaction.response.send_message(
                 "Search is disabled for this command.",
@@ -346,22 +366,25 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
             )
             return
 
-        # Determine which model to use
         use_specials = special
+        hidden_balls = pkg_settings["hidden_balls"]
+        hidden_specials = pkg_settings["hidden_specials"]
 
         if use_specials:
-            # Special rarity mode
-            all_items = [s for s in special_cache.values() if s.rarity > 0 and not s.hidden]
+            all_items = [
+                s for s in special_cache.values()
+                if s.rarity > 0 and not s.hidden and s.pk not in hidden_specials
+            ]
             item_name_key = lambda x: x.name
-            item_emoji_key = lambda x: x.emoji or "N/A"
+            item_emoji_key = lambda x: _special_emoji(bot, x)
             item_rarity_key = lambda x: float(x.rarity)
             list_title = f"{settings.bot_name} Special Rarity List"
             is_special_mode = True
         else:
-            # Ball rarity mode
-            hidden_balls = pkg_settings["hidden_balls"]
-            all_items = [b for b in balls_cache.values() if b.enabled and b.rarity > 0]
-            all_items = [b for b in all_items if b.country.lower() not in hidden_balls]
+            all_items = [
+                b for b in balls_cache.values()
+                if b.enabled and b.rarity > 0 and b.pk not in hidden_balls
+            ]
             item_name_key = lambda x: x.country
             item_emoji_key = lambda x: _ball_emoji(bot, x)
             item_rarity_key = lambda x: float(x.rarity)
@@ -377,7 +400,6 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
 
         # ── Search mode ───────────────────────────────────────────────────────
         if search:
-            # Try rarity value search (if enabled)
             is_rarity_search = False
             if pkg_settings["rarity_search_enabled"]:
                 try:
@@ -387,7 +409,6 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
                     is_rarity_search = False
 
             if is_rarity_search:
-                # Search by rarity value
                 if pkg_settings["tier_mode"] and not is_special_mode:
                     try:
                         tier_num = int(search)
@@ -477,23 +498,17 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
         entries_per_page = pkg_settings["entries_per_page"]
         show_thumbnail = pkg_settings["show_thumbnail"]
 
-        # Get bot avatar URL
         bot_avatar = bot.user.display_avatar.url if bot.user else None
 
         if use_embed_style:
-            # Embed style
             entries: list[tuple[str, str]] = []
             for key in sorted_keys:
                 group_items = rarity_map[key]
                 lines = "\n".join(
                     f"⋄ {item_emoji_key(b)} {item_name_key(b)}" for b in group_items
                 )
-                if pkg_settings["tier_mode"] and not is_special_mode:
-                    entries.append((f"∥ T{key}", lines))
-                else:
-                    # For specials, show percentage; for balls, show raw rarity
-                    label = _format_rarity_value(key, False, is_special_mode)
-                    entries.append((f"∥ Rarity: {label}", lines))
+                label = _get_rarity_label(key, pkg_settings, is_special_mode)
+                entries.append((label, lines))
 
             chunks = [
                 entries[i : i + entries_per_page]
@@ -516,24 +531,20 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
                 embed_pages.append(e)
 
             view = EmbedPaginatorView(interaction.user.id, embed_pages, buttons_inside)
-
             await interaction.followup.send(
                 embed=embed_pages[0], view=view, ephemeral=ephemeral
             )
             return
 
-        # Container style with thumbnail accessory
+        # Container style
         all_components: list[discord.ui.Item] = []
         for key in sorted_keys:
             group_items = rarity_map[key]
             lines = "\n".join(
                 f"⋄ {item_emoji_key(b)} {item_name_key(b)}" for b in group_items
             )
-            if pkg_settings["tier_mode"] and not is_special_mode:
-                all_components.append(discord.ui.TextDisplay(f"**∥ T{key}**\n{lines}"))
-            else:
-                label = _format_rarity_value(key, False, is_special_mode)
-                all_components.append(discord.ui.TextDisplay(f"**∥ Rarity: {label}**\n{lines}"))
+            label = _get_rarity_label(key, pkg_settings, is_special_mode)
+            all_components.append(discord.ui.TextDisplay(f"**{label}**\n{lines}"))
 
         pages: list[list[discord.ui.Item]] = [
             all_components[i : i + entries_per_page]
@@ -596,19 +607,20 @@ def build_rarity_command(bot: "BallsDexBot") -> app_commands.Command:
 
         use_specials = interaction.namespace.special if hasattr(interaction.namespace, "special") else False
         hidden_balls = pkg_settings["hidden_balls"]
+        hidden_specials = pkg_settings["hidden_specials"]
 
         results: list[app_commands.Choice[str]] = []
 
         if use_specials:
             for s in special_cache.values():
-                if s.rarity > 0 and not s.hidden:
+                if s.rarity > 0 and not s.hidden and s.pk not in hidden_specials:
                     if current.lower() in s.name.lower():
                         results.append(app_commands.Choice(name=s.name, value=s.name))
                         if len(results) >= 25:
                             break
         else:
             for b in balls_cache.values():
-                if b.enabled and b.rarity > 0 and b.country.lower() not in hidden_balls:
+                if b.enabled and b.rarity > 0 and b.pk not in hidden_balls:
                     if current.lower() in b.country.lower():
                         results.append(app_commands.Choice(name=b.country, value=b.country))
                         if len(results) >= 25:
