@@ -12,9 +12,11 @@ if TYPE_CHECKING:
 
 async def load_settings() -> dict[str, str | int | bool | set[int]]:
     from settings.models import Settings
-    from rarity.models import RaritySettings, RarityTag
+    from rarity.models import RaritySettings
 
-    settings_obj = await Settings.objects.prefetch_related("rarity_settings").afirst()
+    settings_obj = await Settings.objects.prefetch_related(
+        "rarity_settings", "rarity_settings__tags"
+    ).afirst()
     
     defaults = {
         "embed_color": "",
@@ -40,7 +42,7 @@ async def load_settings() -> dict[str, str | int | bool | set[int]]:
 
     # Load rarity tags
     tags = {}
-    async for tag in RarityTag.objects.all():
+    async for tag in rarity.tags.all():
         key = (tag.rarity_value, tag.is_tier_tag)
         tags[key] = tag.tag_text
 
