@@ -9,13 +9,13 @@ class RarityTagInline(admin.TabularInline):
     model = RarityTag
     extra = 1
     fields = ("rarity_value", "is_tier_tag", "tag_text")
-
-
-@admin.register(RarityTag)
-class RarityTagAdmin(admin.ModelAdmin):
-    list_display = ("rarity_value", "is_tier_tag", "tag_text")
-    list_filter = ("is_tier_tag",)
-    search_fields = ("tag_text",)
+    
+    def get_formset(self, request, obj=None, **kwargs):
+        # Auto-assign rarity_settings on new tags
+        formset = super().get_formset(request, obj, **kwargs)
+        if obj:
+            formset.form.base_fields["rarity_settings"].initial = obj
+        return formset
 
 
 @admin.register(RaritySettings)
@@ -63,7 +63,6 @@ class RaritySettingsAdmin(admin.ModelAdmin):
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        # Remove settings field from form
         if "settings" in form.base_fields:
             del form.base_fields["settings"]
         return form
@@ -83,6 +82,15 @@ class RaritySettingsAdmin(admin.ModelAdmin):
                 )
                 return
         super().save_model(request, obj, form, change)
+    
+    def save_formset(self, request, form, formset, change):
+        # Auto-assign rarity_settings to new tags
+        instances = formset.save(commit=False)
+        for instance in instances:
+            if isinstance(instance, RarityTag) and instance.rarity_settings_id is None:
+                instance.rarity_settings = form.instance
+            instance.save()
+        formset.save_m2m()
     
     def changelist_view(self, request, extra_context=None):
         try:
