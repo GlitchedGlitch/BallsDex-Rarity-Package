@@ -3,36 +3,6 @@ from settings.models import Settings
 from bd_models.models import Ball, Special
 
 
-class RarityTag(models.Model):
-    """
-    Custom tags appended to specific rarity values in the rarity list.
-    """
-    rarity_value = models.FloatField(
-        help_text="The rarity value to tag. Use -1 for tier mode tags.",
-        verbose_name="Rarity value",
-    )
-    is_tier_tag = models.BooleanField(
-        default=False,
-        help_text="If checked, rarity_value is treated as a tier number instead of raw rarity",
-        verbose_name="Is tier tag",
-    )
-    tag_text = models.CharField(
-        max_length=64,
-        help_text="Text to append (e.g. 'craftable', 'event only')",
-        verbose_name="Tag text",
-    )
-
-    class Meta:
-        app_label = "settings"
-        db_table = "rarity_raritytag"
-        verbose_name = "Rarity Tag"
-        verbose_name_plural = "Rarity Tags"
-
-    def __str__(self) -> str:
-        mode = "Tier" if self.is_tier_tag else "Rarity"
-        return f"{mode} {self.rarity_value}: {self.tag_text}"
-
-
 class RaritySettings(models.Model):
     """
     Rarity-specific settings
@@ -130,21 +100,37 @@ class RaritySettings(models.Model):
         return set(self.hidden_specials.values_list("pk", flat=True))
 
 
-class RaritySettingsProxy:
+class RarityTag(models.Model):
     """
-    Proxy to access RaritySettings singleton safely.
+    Custom tags appended to specific rarity values
     """
-    _instance: RaritySettings | None = None
+    rarity_settings = models.ForeignKey(
+        RaritySettings,
+        on_delete=models.CASCADE,
+        related_name="tags",
+        editable=False,
+    )
+    rarity_value = models.FloatField(
+        help_text="The rarity value to tag. Use -1 for tier mode tags.",
+        verbose_name="Rarity value",
+    )
+    is_tier_tag = models.BooleanField(
+        default=False,
+        help_text="If checked, rarity value is treated as a tier number instead of raw rarity",
+        verbose_name="Is tier tag",
+    )
+    tag_text = models.CharField(
+        max_length=64,
+        help_text="Text to append (e.g. 'craftable', 'event only')",
+        verbose_name="Tag text",
+    )
 
-    @classmethod
-    def get_instance(cls) -> RaritySettings | None:
-        if cls._instance is None:
-            try:
-                cls._instance = RaritySettings.objects.select_related("settings").first()
-            except Exception:
-                pass
-        return cls._instance
+    class Meta:
+        app_label = "settings"
+        db_table = "rarity_raritytag"
+        verbose_name = "Rarity Tag"
+        verbose_name_plural = "Rarity Tags"
 
-    @classmethod
-    def clear_cache(cls):
-        cls._instance = None
+    def __str__(self) -> str:
+        mode = "Tier" if self.is_tier_tag else "Rarity"
+        return f"{mode} {self.rarity_value}: {self.tag_text}"
