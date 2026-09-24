@@ -20,6 +20,12 @@ class RarityConfig(AppConfig):
                         "embed_color": "",
                         "style": RaritySettings.Style.CONTAINER,
                         "buttons_inside": True,
+                        "tier_mode": False,
+                        "entries_per_page": 7,
+                        "search_enabled": True,
+                        "rarity_search_enabled": True,
+                        "ephemeral_enabled": True,
+                        "show_thumbnail": True,
                     }
                 )
         except Exception:
