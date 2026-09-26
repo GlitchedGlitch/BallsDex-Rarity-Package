@@ -54,7 +54,7 @@ class RaritySettings(models.Model):
     )
     rarity_search_enabled = models.BooleanField(
         default=True,
-        help_text="Allow searching by rarity value. Disable to search by ball name only.",
+        help_text="Allow searching by rarity value. Disable to search by ball name only",
         verbose_name="Rarity search enabled",
     )
     ephemeral_enabled = models.BooleanField(
@@ -91,13 +91,13 @@ class RaritySettings(models.Model):
     def __str__(self) -> str:
         return "Rarity Settings"
 
-    def get_hidden_balls_set(self) -> set[int]:
+    async def get_hidden_balls_set(self) -> set[int]:
         """Return a set of hidden ball IDs."""
-        return set(self.hidden_balls.values_list("pk", flat=True))
+        return {pk async for pk in self.hidden_balls.values_list("pk", flat=True)}
 
-    def get_hidden_specials_set(self) -> set[int]:
+    async def get_hidden_specials_set(self) -> set[int]:
         """Return a set of hidden special IDs."""
-        return set(self.hidden_specials.values_list("pk", flat=True))
+        return {pk async for pk in self.hidden_specials.values_list("pk", flat=True)}
 
 
 class RarityTag(models.Model):

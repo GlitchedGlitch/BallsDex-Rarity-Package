@@ -55,8 +55,8 @@ async def load_settings() -> dict[str, str | int | bool | set[int]]:
         "search_enabled": rarity.search_enabled,
         "rarity_search_enabled": rarity.rarity_search_enabled,
         "ephemeral_enabled": rarity.ephemeral_enabled,
-        "hidden_balls": rarity.get_hidden_balls_set(),
-        "hidden_specials": rarity.get_hidden_specials_set(),
+        "hidden_balls": await rarity.get_hidden_balls_set(),
+        "hidden_specials": await rarity.get_hidden_specials_set(),
         "show_thumbnail": rarity.show_thumbnail,
         "rarity_tags": tags,
     }

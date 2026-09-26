@@ -61,38 +61,41 @@ def _hex_to_color(hex_str: str) -> discord.Color | None:
 
 def _calculate_tiers(balls_list: list[Ball]) -> dict[int, list[Ball]]:
     """
-    Calculate tiers from rarity values
+    Group balls into tiers on a log scale
     """
     if not balls_list:
         return {}
 
     # Sort by rarity ascending
     sorted_balls = sorted(balls_list, key=lambda b: b.rarity)
-    
+
     rarities = [b.rarity for b in sorted_balls if b.rarity > 0]
     if not rarities:
         return {}
 
     min_r = min(rarities)
     max_r = max(rarities)
-    
+
     if max_r == min_r:
         return {1: sorted_balls}
 
-    log_min = math.log(min_r) if min_r > 0 else 0
-    log_max = math.log(max_r) if max_r > 0 else 0
-    log_range = log_max - log_min if log_max != log_min else 1
-    
+    log_min = math.log(min_r)
+    log_max = math.log(max_r)
+    log_range = log_max - log_min
+
+    TIER_STEP = 0.35
+    tier_count = max(1, math.ceil(log_range / TIER_STEP))
+
     tiers: dict[int, list[Ball]] = defaultdict(list)
-    
+
     for ball in sorted_balls:
         if ball.rarity <= 0:
             continue
-        log_r = math.log(ball.rarity) if ball.rarity > 0 else log_min
+        log_r = math.log(ball.rarity)
 
-        normalized = (log_r - log_min) / log_range if log_range > 0 else 0
+        normalized = (log_r - log_min) / log_range
 
-        tier = max(1, int((1 - normalized) * 10) + 1)
+        tier = min(tier_count, int(normalized * tier_count) + 1)
 
         tiers[tier].append(ball)
 

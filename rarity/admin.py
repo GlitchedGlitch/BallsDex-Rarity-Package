@@ -1,5 +1,4 @@
 from django.contrib import admin, messages
-from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from .models import RaritySettings, RarityTag
@@ -9,33 +8,22 @@ class RarityTagInline(admin.TabularInline):
     model = RarityTag
     extra = 1
     fields = ("rarity_value", "is_tier_tag", "tag_text")
-    
-    def get_formset(self, request, obj=None, **kwargs):
-        # Auto-assign rarity_settings on new tags
-        formset = super().get_formset(request, obj, **kwargs)
-        if obj:
-            formset.form.base_fields["rarity_settings"].initial = obj
-        return formset
 
 
 @admin.register(RaritySettings)
 class RaritySettingsAdmin(admin.ModelAdmin):
+    filter_horizontal = ("hidden_balls", "hidden_specials")
     fieldsets = (
-        (None, {
+        ("Display", {
             "fields": (
                 "embed_color",
                 "style",
                 "buttons_inside",
-            ),
-            "description": "Configure how the rarity command displays its output.",
-        }),
-        ("Display", {
-            "fields": (
                 "tier_mode",
                 "entries_per_page",
                 "show_thumbnail",
             ),
-            "description": "Configure list display options.",
+            "description": "Configure how the rarity command displays its output.",
         }),
         ("Command Options", {
             "fields": (
@@ -84,8 +72,9 @@ class RaritySettingsAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
     
     def save_formset(self, request, form, formset, change):
-        # Auto-assign rarity_settings to new tags
         instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
         for instance in instances:
             if isinstance(instance, RarityTag) and instance.rarity_settings_id is None:
                 instance.rarity_settings = form.instance
@@ -93,11 +82,18 @@ class RaritySettingsAdmin(admin.ModelAdmin):
         formset.save_m2m()
     
     def changelist_view(self, request, extra_context=None):
-        try:
-            obj = RaritySettings.objects.select_related("settings").get()
-            return HttpResponseRedirect(
-                reverse("admin:settings_raritysettings_change", args=[obj.pk])
-            )
-        except (ObjectDoesNotExist, RaritySettings.MultipleObjectsReturned):
-            pass
-        return super().changelist_view(request, extra_context=extra_context)
+        obj = RaritySettings.objects.select_related("settings").first()
+        if obj is None:
+            from settings.models import Settings
+            global_settings = Settings.objects.first()
+            if global_settings is None:
+                self.message_user(
+                    request,
+                    "No global Settings instance found! Please create one first.",
+                    messages.ERROR,
+                )
+                return super().changelist_view(request, extra_context=extra_context)
+            obj = RaritySettings.objects.create(settings=global_settings)
+        return HttpResponseRedirect(
+            reverse("admin:settings_raritysettings_change", args=[obj.pk])
+        )
